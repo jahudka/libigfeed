@@ -132,7 +132,7 @@ class Client {
 
     private function createPost(array $data) : Post {
         return new Post(
-            preg_replace('/_.+$/', '', $data['id']),
+            $data['id'],
             $data['type'],
             $data['link'],
             new \DateTimeImmutable('@' . $data['created_time']),
