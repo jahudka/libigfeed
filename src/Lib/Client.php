@@ -87,8 +87,8 @@ class Client {
     }
 
     public function download(Media $media, string $path) : void {
-        if (($fp = @fopen($path, 'xb')) === false) {
-            throw new \RuntimeException(sprintf('Failed to create the file %s', $path));
+        if (($fp = @fopen($path, 'wb')) === false) {
+            throw new \RuntimeException(sprintf('Failed to open %s for writing', $path));
         }
 
         try {
