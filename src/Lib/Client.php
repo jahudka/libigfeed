@@ -68,12 +68,13 @@ class Client {
         do {
             $payload = $this->sendApiRequest(sprintf('/v1/users/%s/media/recent', $this->accountId), 'GET', [
                 'access_token' => $this->getToken(),
-                'min_id' => $after,
                 'max_id' => $next,
             ]);
 
             foreach ($payload['data'] as $post) {
-                if (($type === null || $post['type'] === $type) && ($after === null || $post['id'] !== $after)) {
+                if ($after !== null && $post['id'] === $after) {
+                    break 2;
+                } else if ($type === null || $post['type'] === $type) {
                     $posts[] = $this->createPost($post);
 
                     if ($limit !== null && ++$count >= $limit) {

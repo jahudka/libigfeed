@@ -32,7 +32,7 @@ class ClientFetchDataTest extends TestCase {
         $handler = new MockHandler([
             new Response(200, [], fopen(__DIR__ . '/../fixtures/responses/posts-p1.json', 'rb'), '2.0'),
             new Response(200, [], fopen(__DIR__ . '/../fixtures/responses/posts-p2.json', 'rb'), '2.0'),
-            new Response(200, [], fopen(__DIR__ . '/../fixtures/responses/posts-empty.json', 'rb'), '2.0'),
+            new Response(200, [], fopen(__DIR__ . '/../fixtures/responses/posts-p1.json', 'rb'), '2.0'),
             new Response(200, [], fopen(self::$vfs->url() . '/dummy.jpg', 'rb'), '2.0'),
         ]);
 
@@ -55,13 +55,13 @@ class ClientFetchDataTest extends TestCase {
         $this->assertEquals(8, count($posts));
         array_map(function($post) { $this->assertInstanceOf(Post::class, $post); }, $posts);
 
-        $last = end($posts);
+        $latest = reset($posts);
 
-        $more = self::$client->getLatestPosts(null, $last->getId());
+        $more = self::$client->getLatestPosts(null, $latest->getId());
         $this->assertIsArray($more);
         $this->assertEquals(0, count($more));
 
-        return $last;
+        return $latest;
     }
 
 
