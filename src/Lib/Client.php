@@ -73,7 +73,7 @@ class Client {
             ]);
 
             foreach ($payload['data'] as $post) {
-                if ($type === null || $post['type'] === $type) {
+                if (($type === null || $post['type'] === $type) && ($after === null || $post['id'] !== $after)) {
                     $posts[] = $this->createPost($post);
 
                     if ($limit !== null && ++$count >= $limit) {
