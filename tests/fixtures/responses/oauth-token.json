@@ -1,0 +1,9 @@
+{
+    "access_token": "foo.barbar.bazbazbaz",
+    "user": {
+        "id": "123456789",
+        "username": "snoopdogg",
+        "full_name": "Snoop Dogg",
+        "profile_picture": "..."
+    }
+}
