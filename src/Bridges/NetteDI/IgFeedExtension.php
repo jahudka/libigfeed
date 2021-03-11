@@ -16,7 +16,6 @@ class IgFeedExtension extends CompilerExtension {
         'httpClient' => null,
         'clientId' => null,
         'clientSecret' => null,
-        'accountId' => 'self',
         'tokenStoragePath' => null,
     ];
 
