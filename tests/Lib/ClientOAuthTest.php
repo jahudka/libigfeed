@@ -8,6 +8,7 @@ use GuzzleHttp\Client as HttpClient;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Response;
+use IgFeed\Lib\AccessTokenException;
 use IgFeed\Lib\Client;
 use org\bovigo\vfs\vfsStream;
 use org\bovigo\vfs\vfsStreamContent;
@@ -28,8 +29,9 @@ class ClientOAuthTest extends TestCase {
         self::$vfs = vfsStream::setup();
 
         $handler = new MockHandler([
-            new Response(200, [], fopen(__DIR__ . '/../fixtures/responses/oauth-token.json', 'rb'), '2.0'),
-            new Response(400, [], fopen(__DIR__ . '/../fixtures/responses/oauth-err.json', 'rb'), '2.0'),
+            new Response(200, [], fopen(__DIR__ . '/../fixtures/responses/oauth-token-short.json', 'rb'), '1.1'),
+            new Response(200, [], fopen(__DIR__ . '/../fixtures/responses/oauth-token-long.json', 'rb'), '1.1'),
+            new Response(400, [], fopen(__DIR__ . '/../fixtures/responses/oauth-err.json', 'rb'), '1.1'),
         ]);
 
         $stack = HandlerStack::create($handler);
@@ -39,7 +41,6 @@ class ClientOAuthTest extends TestCase {
             $httpClient,
             'clientId123456',
             'clientSecret123456',
-            'self',
             self::$vfs->url() . '/instagram.token'
         );
     }
@@ -51,10 +52,10 @@ class ClientOAuthTest extends TestCase {
 
     /**
      * @depends testIsNotConnected
-     * @expectedException \IgFeed\Lib\AccessTokenException
      */
     public function testRequestsThrow() : void {
-        self::$client->getLatestPosts();
+        $this->expectException(AccessTokenException::class);
+        self::$client->getLatestMedia();
     }
 
     /**
@@ -72,15 +73,19 @@ class ClientOAuthTest extends TestCase {
         self::$client->exchangeCodeForAccessToken('http://dummy.url', 'dummy.code');
         $this->assertTrue(self::$vfs->hasChild('instagram.token'));
         $this->assertEquals(vfsStreamContent::TYPE_FILE, self::$vfs->getChild('instagram.token')->getType());
-        $this->assertEquals('foo.barbar.bazbazbaz', self::$vfs->getChild('instagram.token')->getContent());
+
+        $data = self::$vfs->getChild('instagram.token')->getContent();
+        $token = json_decode($data);
+        $this->assertEquals('foo.barbar.bazbazbaz', $token->value);
+        $this->assertIsInt($token->expires);
     }
 
     /**
      * @depends testExchangeCodeForAccessToken
-     * @expectedException \IgFeed\Lib\AccessTokenException
      */
     public function testInvalidToken() : void {
-        self::$client->getLatestPosts();
+        $this->expectException(AccessTokenException::class);
+        self::$client->getLatestMedia();
     }
 
 }

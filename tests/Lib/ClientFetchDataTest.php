@@ -9,7 +9,7 @@ use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Response;
 use IgFeed\Lib\Client;
-use IgFeed\Lib\Post;
+use IgFeed\Lib\Media;
 use org\bovigo\vfs\vfsStream;
 use org\bovigo\vfs\vfsStreamDirectory;
 use PHPUnit\Framework\TestCase;
@@ -26,7 +26,8 @@ class ClientFetchDataTest extends TestCase {
 
     public static function setUpBeforeClass() : void {
         self::$vfs = vfsStream::setup();
-        self::$vfs->addChild(vfsStream::newFile('instagram.token')->setContent('foo.barbar.bazbazbaz'));
+        $token = json_encode(['value' => 'foo.barbar.bazbazbaz', 'expires' => time() + 604800]);
+        self::$vfs->addChild(vfsStream::newFile('instagram.token')->setContent($token));
         self::$vfs->addChild(vfsStream::newFile('dummy.jpg')->setContent('not-really-jpg-binary-data'));
 
         $handler = new MockHandler([
@@ -43,23 +44,22 @@ class ClientFetchDataTest extends TestCase {
             $httpClient,
             'clientId123456',
             'clientSecret123456',
-            'self',
             self::$vfs->url() . '/instagram.token'
         );
     }
 
 
-    public function testGetLatestPosts() : Post {
-        $posts = self::$client->getLatestPosts();
-        $this->assertIsArray($posts);
-        $this->assertEquals(8, count($posts));
-        array_map(function($post) { $this->assertInstanceOf(Post::class, $post); }, $posts);
+    public function testGetLatestPosts() : Media {
+        $items = self::$client->getLatestMedia();
+        $this->assertIsArray($items);
+        $this->assertCount(8, $items);
+        array_map(function($media) { $this->assertInstanceOf(Media::class, $media); }, $items);
 
-        $latest = reset($posts);
+        $latest = reset($items);
 
-        $more = self::$client->getLatestPosts(null, $latest->getId());
+        $more = self::$client->getLatestMedia(null, $latest->getId());
         $this->assertIsArray($more);
-        $this->assertEquals(0, count($more));
+        $this->assertCount(0, $more);
 
         return $latest;
     }
@@ -67,11 +67,11 @@ class ClientFetchDataTest extends TestCase {
 
     /**
      * @depends testGetLatestPosts
-     * @param Post $post
+     * @param Media $media
      */
-    public function testDownload(Post $post) : void {
+    public function testDownload(Media $media) : void {
         $path = self::$vfs->url() . '/downloaded.jpg';
-        self::$client->download($post->getImage('standard_resolution'), $path);
+        self::$client->download($media, $path);
         $this->assertTrue(self::$vfs->hasChild('downloaded.jpg'));
         $this->assertEquals('not-really-jpg-binary-data', self::$vfs->getChild('downloaded.jpg')->getContent());
     }

@@ -6,12 +6,12 @@
     "require": {
         "php": ">=7.1",
         "ext-json": "*",
-        "guzzlehttp/guzzle": "^6.3.3"
+        "guzzlehttp/guzzle": "^7.0.1"
     },
     "require-dev": {
         "nette/di": "^2.4",
-        "phpunit/phpunit": "^7.5",
-        "mikey179/vfsStream": "^1.6"
+        "phpunit/phpunit": "^9.3",
+        "mikey179/vfsstream": "^1.6"
     },
     "autoload": {
         "psr-4": {

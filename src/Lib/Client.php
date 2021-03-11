@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace IgFeed\Lib;
 
+use DateTimeImmutable;
 use GuzzleHttp\Client as HttpClient;
 use GuzzleHttp\Exception\ClientException;
+use RuntimeException;
+use Throwable;
 
 
 class Client {
-
     private const API_URL = 'https://api.instagram.com';
+    private const GRAPH_URL = 'https://graph.instagram.com';
 
 
     /** @var HttpClient */
@@ -23,13 +26,10 @@ class Client {
     private $clientSecret;
 
     /** @var string */
-    private $accountId;
-
-    /** @var string */
     private $tokenStoragePath;
 
 
-    /** @var string */
+    /** @var AccessToken */
     private $token = null;
 
 
@@ -37,13 +37,11 @@ class Client {
         HttpClient $httpClient,
         string $clientId,
         string $clientSecret,
-        string $accountId,
         string $tokenStoragePath
     ) {
         $this->httpClient = $httpClient;
         $this->clientId = $clientId;
         $this->clientSecret = $clientSecret;
-        $this->accountId = $accountId;
         $this->tokenStoragePath = $tokenStoragePath;
     }
 
@@ -54,46 +52,48 @@ class Client {
 
 
     /**
-     * @param string $type
-     * @param string $after
-     * @param int $limit
-     * @return Post[]
+     * @param string|null $type
+     * @param string|null $after
+     * @param int|null $limit
+     * @return Media[]
      * @throws AccessTokenException
      */
-    public function getLatestPosts(?string $type = null, ?string $after = null, ?int $limit = null) : array {
+    public function getLatestMedia(?string $type = null, ?string $after = null, ?int $limit = null) : array {
         $next = null;
-        $posts = [];
+        $items = [];
         $count = 0;
 
         do {
-            $payload = $this->sendApiRequest(sprintf('/v1/users/%s/media/recent', $this->accountId), 'GET', [
-                'access_token' => $this->getToken(),
-                'max_id' => $next,
+            $payload = $this->sendGraphRequest('/me/media', 'GET', [
+                'fields' => 'id,caption,media_type,media_url,permalink,timestamp',
+                'access_token' => $this->getToken()->getValue(),
+                'limit' => 25,
+                'after' => $next,
             ]);
 
-            foreach ($payload['data'] as $post) {
-                if ($after !== null && $post['id'] === $after) {
+            foreach ($payload['data'] as $media) {
+                if ($after !== null && $media['id'] === $after) {
                     break 2;
-                } else if ($type === null || $post['type'] === $type) {
-                    $posts[] = $this->createPost($post);
+                } else if ($type === null || $media['media_type'] === $type) {
+                    $items[] = $this->createMedia($media);
 
                     if ($limit !== null && ++$count >= $limit) {
                         break 2;
                     }
                 }
             }
-        } while ($next = $payload['pagination']['next_max_id'] ?? null);
+        } while ($next = $payload['paging']['cursors']['after'] ?? null);
 
-        return $posts;
+        return $items;
     }
 
     public function download(Media $media, string $path) : void {
         if (($fp = @fopen($path, 'wb')) === false) {
-            throw new \RuntimeException(sprintf('Failed to open %s for writing', $path));
+            throw new RuntimeException(sprintf('Failed to open %s for writing', $path));
         }
 
         try {
-            $response = $this->httpClient->get($media->getUrl());
+            $response = $this->httpClient->get($media->getMediaUrl());
             $body = $response->getBody();
 
             while (!$body->eof()) {
@@ -108,12 +108,23 @@ class Client {
         return sprintf('%s/oauth/authorize?%s', self::API_URL, http_build_query([
             'client_id' => $this->clientId,
             'redirect_uri' => $redirectUri,
+            'scope' => 'user_profile,user_media',
             'response_type' => 'code',
-            'scopes' => 'basic public_content',
         ]));
     }
 
     public function exchangeCodeForAccessToken(string $redirectUri, string $code) : void {
+        try {
+            $shortLivedToken = $this->exchangeCodeForShortLivedToken($redirectUri, $code);
+            $this->token = $this->exchangeShortLivedTokenForLongLived($shortLivedToken);
+            $this->saveToken($this->token);
+        } catch (Throwable $e) {
+            $this->cleanToken();
+            throw $e;
+        }
+    }
+
+    private function exchangeCodeForShortLivedToken(string $redirectUri, string $code) : string {
         $payload = $this->sendApiRequest('/oauth/access_token', 'POST', [
             'client_id' => $this->clientId,
             'client_secret' => $this->clientSecret,
@@ -123,64 +134,72 @@ class Client {
         ]);
 
         if (isset($payload['access_token'])) {
-            $this->saveToken($payload['access_token']);
+            return $payload['access_token'];
         } else {
-            $this->cleanToken();
-            throw new AccessTokenException();
+            throw new AccessTokenException('Failed exchanging code for short-lived token');
         }
     }
 
+    private function exchangeShortLivedTokenForLongLived(string $token) : AccessToken {
+        $payload = $this->sendGraphRequest('/access_token', 'GET', [
+            'grant_type' => 'ig_exchange_token',
+            'client_secret' => $this->clientSecret,
+            'access_token' => $token,
+        ]);
 
-    private function createPost(array $data) : Post {
-        return new Post(
+        if (isset($payload['access_token']) && isset($payload['expires_in'])) {
+            return new AccessToken($payload['access_token'], time() + $payload['expires_in']);
+        } else {
+            throw new AccessTokenException('Failed exchanging short-lived token for long-lived');
+        }
+    }
+
+    private function createMedia(array $data) : Media {
+        return new Media(
             $data['id'],
-            $data['type'],
-            $data['link'],
-            new \DateTimeImmutable('@' . $data['created_time']),
-            $data['images']['standard_resolution']['width'],
-            $data['images']['standard_resolution']['height'],
-            $data['likes']['count'] ?? 0,
-            $data['comments']['count'] ?? 0,
-            $data['caption']['text'] ?? null,
-            $this->createMediaCollection($data['images']),
-            $data['type'] === Post::VIDEO ? $this->createMediaCollection($data['videos']) : null
+            $data['media_type'],
+            $data['media_url'],
+            $data['permalink'],
+            new DateTimeImmutable($data['timestamp']),
+            $data['caption'] ?? null
         );
     }
 
-    private function createMediaCollection(array $media) : array {
-        return array_map(function(array $info) : Media {
-            return new Media($info['url'], $info['width'], $info['height']);
-        }, $media);
+    private function sendApiRequest(string $endpoint, string $method = 'GET', array $params = []) : array {
+        return $this->sendRequest(self::API_URL . $endpoint, $method, $params);
     }
 
+    private function sendGraphRequest(string $endpoint, string $method = 'GET', array $params = []) : array {
+        return $this->sendRequest(self::GRAPH_URL . $endpoint, $method, $params);
+    }
 
-    private function sendApiRequest(string $endpoint, string $method = 'GET', array $params = []) : array {
+    private function sendRequest(string $url, string $method = 'GET', array $params = []) : array {
         try {
             $options = array_filter([
                 'http_errors' => true,
                 $method === 'GET' ? 'query' : 'form_params' => array_filter($params),
             ]);
 
-            $response = $this->httpClient->request(
-                $method,
-                self::API_URL . $endpoint,
-                $options
-            );
-
+            $response = $this->httpClient->request($method, $url, $options);
             return json_decode($response->getBody()->getContents(), true);
-
         } catch (ClientException $e) {
             if ($e->hasResponse()) {
                 $payload = json_decode($e->getResponse()->getBody()->getContents(), true);
 
-                if (isset($payload['meta']['error_type'])) {
-                    switch ($payload['meta']['error_type']) {
-                        case 'OAuthAccessTokenException':
+                if (isset($payload['error'])) {
+                    switch ($payload['error']['code'] ?? -1) {
+                        case 190:
                             $this->cleanToken();
-                            throw new AccessTokenException($payload['meta']['error_message']);
+                            throw new AccessTokenException($payload['error']['message'] ?? 'OAuth Token expired');
 
-                        case 'OAuthRateLimitException':
-                            throw new RateLimitException();
+                        case 4:
+                        case 17:
+                        case 32:
+                        case 613:
+                            throw new RateLimitException($payload['error']['message'] ?? 'Rate limit reached');
+
+                        default:
+                            throw new InstagramException($payload['error']['message'] ?? 'Unknown error when communicating with Instagram API');
                     }
                 }
             }
@@ -189,21 +208,56 @@ class Client {
         }
     }
 
-    private function getToken(bool $need = true) : ?string {
+    private function getToken(bool $need = true) : ?AccessToken {
         if ($this->token) {
             return $this->token;
-        } else if ($token = @file_get_contents($this->tokenStoragePath)) {
-            return $this->token = $token;
-        } else if ($need) {
+        } else if ($rawData = @file_get_contents($this->tokenStoragePath)) {
+            $data = json_decode($rawData, true);
+
+            if ($data['expires'] > time() - 806400) {
+                return $this->token = new AccessToken($data['value'], $data['expires']);
+            }
+
+            if ($data['expires'] > time()) {
+                try {
+                    return $this->token = $this->renewToken($data['value']);
+                } catch (Throwable $e) {
+                    $this->cleanToken();
+                    throw $e;
+                }
+            }
+
+            $this->cleanToken();
+        }
+
+        if ($need) {
             throw new AccessTokenException();
+        }
+
+        return null;
+    }
+
+    private function renewToken(string $token) : AccessToken {
+        $payload = $this->sendGraphRequest('/refresh_access_token', 'GET', [
+            'grant_type' => 'ig_refresh_token',
+            'access_token' => $token,
+        ]);
+
+        if (isset($payload['access_token']) && isset($payload['expires_in'])) {
+            return new AccessToken($payload['access_token'], time() + $payload['expires_in']);
         } else {
-            return null;
+            throw new AccessTokenException('Failed refreshing long-lived token');
         }
     }
 
-    private function saveToken(string $token) : void {
+    private function saveToken(AccessToken $token) : void {
         @mkdir(dirname($this->tokenStoragePath), 0755, true);
-        file_put_contents($this->tokenStoragePath, $token);
+
+        file_put_contents($this->tokenStoragePath, json_encode([
+            'value' => $token->value,
+            'expires' => $token->expires,
+        ]));
+
         $this->token = $token;
     }
 

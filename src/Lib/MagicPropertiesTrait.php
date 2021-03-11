@@ -9,10 +9,12 @@ trait MagicPropertiesTrait {
 
     public function __get(string $name) {
         if (property_exists(self::class, $name)) {
-            $method = 'get' . ucfirst($name);
+            foreach (['get', 'is'] as $prefix) {
+                $method = $prefix . ucfirst($name);
 
-            if (method_exists($this, $method)) {
-                return $this->{$method}();
+                if (method_exists($this, $method)) {
+                    return $this->{$method}();
+                }
             }
         }
 
@@ -20,7 +22,7 @@ trait MagicPropertiesTrait {
         return null;
     }
 
-    public function __isset($name) {
+    public function __isset($name) : bool {
         if (property_exists(self::class, $name)) {
             return isset($this->$name);
         }
