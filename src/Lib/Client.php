@@ -11,27 +11,16 @@ use RuntimeException;
 use Throwable;
 
 
-class Client {
+class Client
+{
     private const API_URL = 'https://api.instagram.com';
     private const GRAPH_URL = 'https://graph.instagram.com';
 
-
-    /** @var HttpClient */
-    private $httpClient;
-
-    /** @var string */
-    private $clientId;
-
-    /** @var string */
-    private $clientSecret;
-
-    /** @var string */
-    private $tokenStoragePath;
-
-
-    /** @var AccessToken */
-    private $token = null;
-
+    private HttpClient $httpClient;
+    private string $clientId;
+    private string $clientSecret;
+    private string $tokenStoragePath;
+    private AccessToken | null $token = null;
 
     public function __construct(
         HttpClient $httpClient,
@@ -45,22 +34,20 @@ class Client {
         $this->tokenStoragePath = $tokenStoragePath;
     }
 
-
-    public function isConnected() : bool {
+    public function isConnected() : bool
+    {
         return $this->getToken(false) !== null;
     }
 
-
     /**
-     * @param string|null $type
-     * @param string|null $after
-     * @param int|null $limit
-     * @return Media[]
-     * @throws AccessTokenException
+     * @return iterable<Media>
      */
-    public function getLatestMedia(?string $type = null, ?string $after = null, ?int $limit = null) : array {
+    public function getLatestMedia(
+        string | null $type = null,
+        string | null $after = null,
+        int | null $limit = null,
+    ) : iterable {
         $next = null;
-        $items = [];
         $count = 0;
 
         do {
@@ -75,7 +62,7 @@ class Client {
                 if ($after !== null && $media['id'] === $after) {
                     break 2;
                 } else if ($type === null || $media['media_type'] === $type) {
-                    $items[] = $this->createMedia($media);
+                    yield $this->createMedia($media);
 
                     if ($limit !== null && ++$count >= $limit) {
                         break 2;
@@ -83,12 +70,11 @@ class Client {
                 }
             }
         } while ($next = $payload['paging']['cursors']['after'] ?? null);
-
-        return $items;
     }
 
-    public function download(Media $media, string $path) : void {
-        if (($fp = @fopen($path, 'wb')) === false) {
+    public function download(Media $media, string $path, bool $overwrite = false) : void
+    {
+        if (($fp = @fopen($path, $overwrite ? 'wb' : 'xb')) === false) {
             throw new RuntimeException(sprintf('Failed to open %s for writing', $path));
         }
 
@@ -104,7 +90,8 @@ class Client {
         }
     }
 
-    public function getAuthorizationUrl(string $redirectUri) : string {
+    public function getAuthorizationUrl(string $redirectUri) : string
+    {
         return sprintf('%s/oauth/authorize?%s', self::API_URL, http_build_query([
             'client_id' => $this->clientId,
             'redirect_uri' => $redirectUri,
@@ -113,18 +100,20 @@ class Client {
         ]));
     }
 
-    public function exchangeCodeForAccessToken(string $redirectUri, string $code) : void {
+    public function exchangeCodeForAccessToken(string $redirectUri, string $code) : void
+    {
         try {
             $shortLivedToken = $this->exchangeCodeForShortLivedToken($redirectUri, $code);
             $this->token = $this->exchangeShortLivedTokenForLongLived($shortLivedToken);
             $this->saveToken($this->token);
         } catch (Throwable $e) {
-            $this->cleanToken();
+            $this->clearToken();
             throw $e;
         }
     }
 
-    private function exchangeCodeForShortLivedToken(string $redirectUri, string $code) : string {
+    private function exchangeCodeForShortLivedToken(string $redirectUri, string $code) : string
+    {
         $payload = $this->sendApiRequest('/oauth/access_token', 'POST', [
             'client_id' => $this->clientId,
             'client_secret' => $this->clientSecret,
@@ -140,7 +129,8 @@ class Client {
         }
     }
 
-    private function exchangeShortLivedTokenForLongLived(string $token) : AccessToken {
+    private function exchangeShortLivedTokenForLongLived(string $token) : AccessToken
+    {
         $payload = $this->sendGraphRequest('/access_token', 'GET', [
             'grant_type' => 'ig_exchange_token',
             'client_secret' => $this->clientSecret,
@@ -154,7 +144,8 @@ class Client {
         }
     }
 
-    private function createMedia(array $data) : Media {
+    private function createMedia(array $data) : Media
+    {
         return new Media(
             $data['id'],
             $data['media_type'],
@@ -165,15 +156,18 @@ class Client {
         );
     }
 
-    private function sendApiRequest(string $endpoint, string $method = 'GET', array $params = []) : array {
+    private function sendApiRequest(string $endpoint, string $method = 'GET', array $params = []) : array
+    {
         return $this->sendRequest(self::API_URL . $endpoint, $method, $params);
     }
 
-    private function sendGraphRequest(string $endpoint, string $method = 'GET', array $params = []) : array {
+    private function sendGraphRequest(string $endpoint, string $method = 'GET', array $params = []) : array
+    {
         return $this->sendRequest(self::GRAPH_URL . $endpoint, $method, $params);
     }
 
-    private function sendRequest(string $url, string $method = 'GET', array $params = []) : array {
+    private function sendRequest(string $url, string $method = 'GET', array $params = []) : array
+    {
         try {
             $options = array_filter([
                 'http_errors' => true,
@@ -189,7 +183,7 @@ class Client {
                 if (isset($payload['error'])) {
                     switch ($payload['error']['code'] ?? -1) {
                         case 190:
-                            $this->cleanToken();
+                            $this->clearToken();
                             throw new AccessTokenException($payload['error']['message'] ?? 'OAuth Token expired');
 
                         case 4:
@@ -208,13 +202,14 @@ class Client {
         }
     }
 
-    private function getToken(bool $need = true) : ?AccessToken {
+    private function getToken(bool $need = true) : AccessToken | null
+    {
         if ($this->token) {
             return $this->token;
         } else if ($rawData = @file_get_contents($this->tokenStoragePath)) {
             $data = json_decode($rawData, true);
 
-            if ($data['expires'] > time() - 806400) {
+            if ($data['expires'] > time() + 86400) {
                 return $this->token = new AccessToken($data['value'], $data['expires']);
             }
 
@@ -222,12 +217,12 @@ class Client {
                 try {
                     return $this->token = $this->renewToken($data['value']);
                 } catch (Throwable $e) {
-                    $this->cleanToken();
+                    $this->clearToken();
                     throw $e;
                 }
             }
 
-            $this->cleanToken();
+            $this->clearToken();
         }
 
         if ($need) {
@@ -237,7 +232,8 @@ class Client {
         return null;
     }
 
-    private function renewToken(string $token) : AccessToken {
+    private function renewToken(string $token) : AccessToken
+    {
         $payload = $this->sendGraphRequest('/refresh_access_token', 'GET', [
             'grant_type' => 'ig_refresh_token',
             'access_token' => $token,
@@ -250,8 +246,12 @@ class Client {
         }
     }
 
-    private function saveToken(AccessToken $token) : void {
-        @mkdir(dirname($this->tokenStoragePath), 0755, true);
+    private function saveToken(AccessToken $token) : void
+    {
+        @mkdir(dirname($this->tokenStoragePath), 0750, true);
+
+        touch($this->tokenStoragePath);
+        chmod($this->tokenStoragePath, 0600);
 
         file_put_contents($this->tokenStoragePath, json_encode([
             'value' => $token->value,
@@ -261,9 +261,9 @@ class Client {
         $this->token = $token;
     }
 
-    private function cleanToken() : void {
+    private function clearToken() : void
+    {
         $this->token = null;
         @unlink($this->tokenStoragePath);
     }
-
 }

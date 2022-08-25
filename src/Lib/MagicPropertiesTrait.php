@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace IgFeed\Lib;
 
 
-trait MagicPropertiesTrait {
-
-    public function __get(string $name) {
+trait MagicPropertiesTrait
+{
+    public function __get(string $name)
+    {
         if (property_exists(self::class, $name)) {
             foreach (['get', 'is'] as $prefix) {
                 $method = $prefix . ucfirst($name);
@@ -22,7 +23,8 @@ trait MagicPropertiesTrait {
         return null;
     }
 
-    public function __isset($name) : bool {
+    public function __isset($name) : bool
+    {
         if (property_exists(self::class, $name)) {
             return isset($this->$name);
         }

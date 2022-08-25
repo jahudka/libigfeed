@@ -4,13 +4,13 @@
     "description": "A backend library for embedding an Instagram feed in your website",
     "license": "MIT",
     "require": {
-        "php": ">=7.1",
+        "php": ">=8.0",
         "ext-json": "*",
-        "guzzlehttp/guzzle": "^7.0.1"
+        "guzzlehttp/guzzle": "^7.4"
     },
     "require-dev": {
         "nette/di": "^2.4",
-        "phpunit/phpunit": "^9.3",
+        "phpunit/phpunit": "^9.5",
         "mikey179/vfsstream": "^1.6"
     },
     "autoload": {

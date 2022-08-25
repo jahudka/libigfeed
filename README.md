@@ -58,7 +58,7 @@ composer require jahudka/libigfeed
        `$client->getAuthorizationUrl($redirectUri)`.
 
  6. When you have successfully authenticated your website you can use the `$client->getLatestMedia()`
-    method to get the latest content from your Instagram feed. The method returns an array
+    method to get the latest content from your Instagram feed. The method returns a `Generator`
     of `IgFeed\Lib\Media` instances. This method will also automatically refresh
     the access token in the background if it's less than 24 hours from expiration.
     

@@ -15,16 +15,13 @@ use org\bovigo\vfs\vfsStreamDirectory;
 use PHPUnit\Framework\TestCase;
 
 
-class ClientFetchDataTest extends TestCase {
+class ClientFetchDataTest extends TestCase
+{
+    private static Client $client;
+    private static vfsStreamDirectory $vfs;
 
-    /** @var Client */
-    protected static $client;
-
-    /** @var vfsStreamDirectory */
-    protected static $vfs;
-
-
-    public static function setUpBeforeClass() : void {
+    public static function setUpBeforeClass() : void
+    {
         self::$vfs = vfsStream::setup();
         $token = json_encode(['value' => 'foo.barbar.bazbazbaz', 'expires' => time() + 604800]);
         self::$vfs->addChild(vfsStream::newFile('instagram.token')->setContent($token));
@@ -49,16 +46,19 @@ class ClientFetchDataTest extends TestCase {
     }
 
 
-    public function testGetLatestPosts() : Media {
-        $items = self::$client->getLatestMedia();
-        $this->assertIsArray($items);
+    public function testGetLatestPosts() : Media
+    {
+        $result = self::$client->getLatestMedia();
+        $this->assertIsIterable($result);
+        $items = [...$result];
         $this->assertCount(8, $items);
         array_map(function($media) { $this->assertInstanceOf(Media::class, $media); }, $items);
 
         $latest = reset($items);
 
-        $more = self::$client->getLatestMedia(null, $latest->getId());
-        $this->assertIsArray($more);
+        $next = self::$client->getLatestMedia(null, $latest->getId());
+        $this->assertIsIterable($next);
+        $more = [...$next];
         $this->assertCount(0, $more);
 
         return $latest;
@@ -67,13 +67,12 @@ class ClientFetchDataTest extends TestCase {
 
     /**
      * @depends testGetLatestPosts
-     * @param Media $media
      */
-    public function testDownload(Media $media) : void {
+    public function testDownload(Media $media) : void
+    {
         $path = self::$vfs->url() . '/downloaded.jpg';
         self::$client->download($media, $path);
         $this->assertTrue(self::$vfs->hasChild('downloaded.jpg'));
         $this->assertEquals('not-really-jpg-binary-data', self::$vfs->getChild('downloaded.jpg')->getContent());
     }
-
 }

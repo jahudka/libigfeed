@@ -6,6 +6,5 @@ namespace IgFeed\Lib;
 
 use Exception;
 
-class InstagramException extends Exception {
 
-}
+class InstagramException extends Exception {}

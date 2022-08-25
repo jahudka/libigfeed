@@ -10,9 +10,9 @@ use Nette\DI\CompilerExtension;
 use Nette\DI\Statement;
 
 
-class IgFeedExtension extends CompilerExtension {
-
-    public $defaults = [
+class IgFeedExtension extends CompilerExtension
+{
+    public array $defaults = [
         'httpClient' => null,
         'clientId' => null,
         'clientSecret' => null,
@@ -20,7 +20,8 @@ class IgFeedExtension extends CompilerExtension {
     ];
 
 
-    public function loadConfiguration() {
+    public function loadConfiguration() : void
+    {
         $config = $this->validateConfig($this->defaults);
         $builder = $this->getContainerBuilder();
 
@@ -32,5 +33,4 @@ class IgFeedExtension extends CompilerExtension {
             ->setType(Client::class)
             ->setArguments($config);
     }
-
 }

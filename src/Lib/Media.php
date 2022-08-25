@@ -15,30 +15,20 @@ use DateTimeImmutable;
  * @property-read DateTimeImmutable $publishedAt
  * @property-read string|null $caption
  */
-class Media {
+class Media
+{
     use MagicPropertiesTrait;
 
     public const IMAGE = 'IMAGE';
     public const VIDEO = 'VIDEO';
     public const CAROUSEL_ALBUM = 'CAROUSEL_ALBUM';
 
-    /** @var string */
-    private $id;
-
-    /** @var string */
-    private $mediaType;
-
-    /** @var string */
-    private $mediaUrl;
-
-    /** @var string */
-    private $permalink;
-
-    /** @var DateTimeImmutable */
-    private $publishedAt;
-
-    /** @var string|null */
-    private $caption;
+    private string $id;
+    private string $mediaType;
+    private string $mediaUrl;
+    private string $permalink;
+    private DateTimeImmutable $publishedAt;
+    private string|null $caption;
 
     public function __construct(
         string $id,
@@ -46,7 +36,7 @@ class Media {
         string $mediaUrl,
         string $permalink,
         DateTimeImmutable $publishedAt,
-        ?string $caption
+        string|null $caption = null,
     ) {
         $this->id = $id;
         $this->mediaType = $mediaType;
@@ -66,15 +56,18 @@ class Media {
         return $this->mediaType;
     }
 
-    public function isImage() : bool {
+    public function isImage() : bool
+    {
         return $this->mediaType === self::IMAGE;
     }
 
-    public function isVideo() : bool {
+    public function isVideo() : bool
+    {
         return $this->mediaType === self::VIDEO;
     }
 
-    public function isCarouselAlbum() : bool {
+    public function isCarouselAlbum() : bool
+    {
         return $this->mediaType === self::CAROUSEL_ALBUM;
     }
 
@@ -93,7 +86,7 @@ class Media {
         return $this->publishedAt;
     }
 
-    public function getCaption() : ?string
+    public function getCaption() : string | null
     {
         return $this->caption;
     }

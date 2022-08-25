@@ -7,13 +7,13 @@ namespace IgFeed\Tests\Lib;
 use IgFeed\Lib\Media;
 use PHPUnit\Framework\TestCase;
 
-class MediaTest extends TestCase {
 
-    /** @var Media */
-    protected $media;
+class MediaTest extends TestCase
+{
+    protected Media $media;
 
-
-    protected function setUp() : void {
+    protected function setUp() : void
+    {
         $this->media = new Media(
             '0123456789',
             Media::IMAGE,
@@ -24,14 +24,15 @@ class MediaTest extends TestCase {
         );
     }
 
-
-    public function test__get() : void {
+    public function test__get() : void
+    {
         $this->assertEquals('0123456789', $this->media->id);
         $this->expectNotice();
         $this->assertNull($this->media->unknownProperty);
     }
 
-    public function test__isset() : void {
+    public function test__isset() : void
+    {
         $this->assertTrue(isset($this->media->id));
         $this->assertTrue(isset($this->media->mediaUrl));
         $this->assertFalse(isset($this->media->unknownProperty));

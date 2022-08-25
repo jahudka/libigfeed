@@ -16,16 +16,14 @@ use org\bovigo\vfs\vfsStreamDirectory;
 use PHPUnit\Framework\TestCase;
 
 
-class ClientOAuthTest extends TestCase {
-
-    /** @var Client */
-    protected static $client;
-
-    /** @var vfsStreamDirectory */
-    protected static $vfs;
+class ClientOAuthTest extends TestCase
+{
+    private static Client $client;
+    private static vfsStreamDirectory $vfs;
 
 
-    public static function setUpBeforeClass() : void {
+    public static function setUpBeforeClass() : void
+    {
         self::$vfs = vfsStream::setup();
 
         $handler = new MockHandler([
@@ -41,27 +39,30 @@ class ClientOAuthTest extends TestCase {
             $httpClient,
             'clientId123456',
             'clientSecret123456',
-            self::$vfs->url() . '/instagram.token'
+            self::$vfs->url() . '/instagram.token',
         );
     }
 
 
-    public function testIsNotConnected() : void {
+    public function testIsNotConnected() : void
+    {
         $this->assertFalse(self::$client->isConnected());
     }
 
     /**
      * @depends testIsNotConnected
      */
-    public function testRequestsThrow() : void {
+    public function testRequestsThrow() : void
+    {
         $this->expectException(AccessTokenException::class);
-        self::$client->getLatestMedia();
+        iterator_to_array(self::$client->getLatestMedia());
     }
 
     /**
      * @depends testRequestsThrow
      */
-    public function testGetAuthorizationUrl() : void {
+    public function testGetAuthorizationUrl() : void
+    {
         $url = self::$client->getAuthorizationUrl('http://dummy.url');
         $this->assertTrue((bool) filter_var($url, FILTER_VALIDATE_URL));
     }
@@ -69,7 +70,8 @@ class ClientOAuthTest extends TestCase {
     /**
      * @depends testGetAuthorizationUrl
      */
-    public function testExchangeCodeForAccessToken() : void {
+    public function testExchangeCodeForAccessToken() : void
+    {
         self::$client->exchangeCodeForAccessToken('http://dummy.url', 'dummy.code');
         $this->assertTrue(self::$vfs->hasChild('instagram.token'));
         $this->assertEquals(vfsStreamContent::TYPE_FILE, self::$vfs->getChild('instagram.token')->getType());
@@ -83,9 +85,9 @@ class ClientOAuthTest extends TestCase {
     /**
      * @depends testExchangeCodeForAccessToken
      */
-    public function testInvalidToken() : void {
+    public function testInvalidToken() : void
+    {
         $this->expectException(AccessTokenException::class);
-        self::$client->getLatestMedia();
+        iterator_to_array(self::$client->getLatestMedia());
     }
-
 }

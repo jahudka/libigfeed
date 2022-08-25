@@ -14,11 +14,8 @@ class AccessToken
 {
     use MagicPropertiesTrait;
 
-    /** @var string */
-    private $value;
-
-    /** @var int */
-    private $expires;
+    private string $value;
+    private int $expires;
 
     public function __construct(string $value, int $expires)
     {
@@ -26,15 +23,18 @@ class AccessToken
         $this->expires = $expires;
     }
 
-    public function getValue() : string {
+    public function getValue() : string
+    {
         return $this->value;
     }
 
-    public function getExpires() : int {
+    public function getExpires() : int
+    {
         return $this->expires;
     }
 
-    public function isExpired() : bool {
+    public function isExpired() : bool
+    {
         return $this->expires <= time();
     }
 }

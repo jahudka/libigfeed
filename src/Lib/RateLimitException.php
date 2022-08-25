@@ -5,6 +5,4 @@ declare(strict_types=1);
 namespace IgFeed\Lib;
 
 
-class RateLimitException extends InstagramException {
-
-}
+class RateLimitException extends InstagramException {}
