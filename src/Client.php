@@ -35,7 +35,7 @@ class Client
      * @return iterable<Media>
      */
     public function getLatestMedia(
-        string | null $type = null,
+        MediaType | null $type = null,
         string | null $after = null,
         int | null $limit = null,
     ) : iterable {
@@ -53,7 +53,7 @@ class Client
             foreach ($payload['data'] as $media) {
                 if ($after !== null && $media['id'] === $after) {
                     break 2;
-                } else if ($type === null || $media['media_type'] === $type) {
+                } else if ($type === null || $media['media_type'] === $type->value) {
                     yield $this->createMedia($media);
 
                     if ($limit !== null && ++$count >= $limit) {
