@@ -4,15 +4,13 @@ declare(strict_types=1);
 
 namespace IgFeed\Tests\Lib;
 
-use GuzzleHttp\Client as HttpClient;
-use GuzzleHttp\Handler\MockHandler;
-use GuzzleHttp\HandlerStack;
-use GuzzleHttp\Psr7\Response;
 use IgFeed\Lib\Client;
 use IgFeed\Lib\Media;
 use org\bovigo\vfs\vfsStream;
 use org\bovigo\vfs\vfsStreamDirectory;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\HttpClient\MockHttpClient;
+use Symfony\Component\HttpClient\Response\MockResponse;
 
 
 class ClientFetchDataTest extends TestCase
@@ -27,15 +25,12 @@ class ClientFetchDataTest extends TestCase
         self::$vfs->addChild(vfsStream::newFile('instagram.token')->setContent($token));
         self::$vfs->addChild(vfsStream::newFile('dummy.jpg')->setContent('not-really-jpg-binary-data'));
 
-        $handler = new MockHandler([
-            new Response(200, [], fopen(__DIR__ . '/../fixtures/responses/posts-p1.json', 'rb'), '2.0'),
-            new Response(200, [], fopen(__DIR__ . '/../fixtures/responses/posts-p2.json', 'rb'), '2.0'),
-            new Response(200, [], fopen(__DIR__ . '/../fixtures/responses/posts-p1.json', 'rb'), '2.0'),
-            new Response(200, [], fopen(self::$vfs->url() . '/dummy.jpg', 'rb'), '2.0'),
+        $httpClient = new MockHttpClient([
+            self::createMockResponse('posts-p1'),
+            self::createMockResponse('posts-p2'),
+            self::createMockResponse('posts-p1'),
+            self::createMockResponse(self::$vfs->url() . '/dummy.jpg'),
         ]);
-
-        $stack = HandlerStack::create($handler);
-        $httpClient = new HttpClient(['handler' => $stack]);
 
         self::$client = new Client(
             $httpClient,
@@ -43,6 +38,19 @@ class ClientFetchDataTest extends TestCase
             'clientSecret123456',
             self::$vfs->url() . '/instagram.token'
         );
+    }
+
+    private static function createMockResponse(string $file) : MockResponse
+    {
+        if (!str_contains($file, '/')) {
+            $file = sprintf(__DIR__ . '/../fixtures/responses/%s.json', $file);
+        }
+
+        return MockResponse::fromFile($file, [
+            'response_headers' => [
+                'Content-Type' => 'application/json',
+            ],
+        ]);
     }
 
 
@@ -56,7 +64,7 @@ class ClientFetchDataTest extends TestCase
 
         $latest = reset($items);
 
-        $next = self::$client->getLatestMedia(null, $latest->getId());
+        $next = self::$client->getLatestMedia(null, $latest->id);
         $this->assertIsIterable($next);
         $more = [...$next];
         $this->assertCount(0, $more);

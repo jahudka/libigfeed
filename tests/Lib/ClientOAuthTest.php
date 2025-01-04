@@ -4,16 +4,14 @@ declare(strict_types=1);
 
 namespace IgFeed\Tests\Lib;
 
-use GuzzleHttp\Client as HttpClient;
-use GuzzleHttp\Handler\MockHandler;
-use GuzzleHttp\HandlerStack;
-use GuzzleHttp\Psr7\Response;
 use IgFeed\Lib\AccessTokenException;
 use IgFeed\Lib\Client;
 use org\bovigo\vfs\vfsStream;
 use org\bovigo\vfs\vfsStreamContent;
 use org\bovigo\vfs\vfsStreamDirectory;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\HttpClient\MockHttpClient;
+use Symfony\Component\HttpClient\Response\MockResponse;
 
 
 class ClientOAuthTest extends TestCase
@@ -26,14 +24,11 @@ class ClientOAuthTest extends TestCase
     {
         self::$vfs = vfsStream::setup();
 
-        $handler = new MockHandler([
-            new Response(200, [], fopen(__DIR__ . '/../fixtures/responses/oauth-token-short.json', 'rb'), '1.1'),
-            new Response(200, [], fopen(__DIR__ . '/../fixtures/responses/oauth-token-long.json', 'rb'), '1.1'),
-            new Response(400, [], fopen(__DIR__ . '/../fixtures/responses/oauth-err.json', 'rb'), '1.1'),
+        $httpClient = new MockHttpClient([
+            self::createMockResponse('oauth-token-short'),
+            self::createMockResponse('oauth-token-long'),
+            self::createMockResponse('oauth-err', 400),
         ]);
-
-        $stack = HandlerStack::create($handler);
-        $httpClient = new HttpClient(['handler' => $stack]);
 
         self::$client = new Client(
             $httpClient,
@@ -41,6 +36,16 @@ class ClientOAuthTest extends TestCase
             'clientSecret123456',
             self::$vfs->url() . '/instagram.token',
         );
+    }
+
+    private static function createMockResponse(string $file, int $status = 200) : MockResponse
+    {
+        return MockResponse::fromFile(sprintf(__DIR__ . '/../fixtures/responses/%s.json', $file), [
+            'http_code' => $status,
+            'response_headers' => [
+                'Content-Type' => 'application/json',
+            ],
+        ]);
     }
 
 

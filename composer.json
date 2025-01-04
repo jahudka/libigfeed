@@ -4,18 +4,17 @@
     "description": "A backend library for embedding an Instagram feed in your website",
     "license": "MIT",
     "require": {
-        "php": ">=8.0",
+        "php": ">=8.4",
         "ext-json": "*",
-        "guzzlehttp/guzzle": "^7.4"
+        "symfony/http-client": "^7.0"
     },
     "require-dev": {
-        "nette/di": "^2.4",
-        "phpunit/phpunit": "^9.5",
-        "mikey179/vfsstream": "^1.6"
+        "mikey179/vfsstream": "^1.6",
+        "phpunit/phpunit": "^9.5"
     },
     "autoload": {
         "psr-4": {
-            "IgFeed\\": "src"
+            "IgFeed\\Lib\\": "src"
         }
     }
 }

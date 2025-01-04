@@ -5,34 +5,26 @@ declare(strict_types=1);
 namespace IgFeed\Lib;
 
 use DateTimeImmutable;
-use GuzzleHttp\Client as HttpClient;
-use GuzzleHttp\Exception\ClientException;
 use RuntimeException;
+use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Throwable;
 
 
 class Client
 {
-    private const API_URL = 'https://api.instagram.com';
-    private const GRAPH_URL = 'https://graph.instagram.com';
+    private const OAUTH_AUTHORIZATION_URL = 'https://www.instagram.com/oauth/authorize';
+    private const OAUTH_API_URL = 'https://api.instagram.com/oauth/access_token';
+    private const GRAPH_API_URL = 'https://graph.instagram.com';
 
-    private HttpClient $httpClient;
-    private string $clientId;
-    private string $clientSecret;
-    private string $tokenStoragePath;
     private AccessToken | null $token = null;
 
     public function __construct(
-        HttpClient $httpClient,
-        string $clientId,
-        string $clientSecret,
-        string $tokenStoragePath
-    ) {
-        $this->httpClient = $httpClient;
-        $this->clientId = $clientId;
-        $this->clientSecret = $clientSecret;
-        $this->tokenStoragePath = $tokenStoragePath;
-    }
+        private readonly HttpClientInterface $httpClient,
+        private readonly string $clientId,
+        private readonly string $clientSecret,
+        private readonly string $tokenStoragePath,
+    ) {}
 
     public function isConnected() : bool
     {
@@ -53,7 +45,7 @@ class Client
         do {
             $payload = $this->sendGraphRequest('/me/media', 'GET', [
                 'fields' => 'id,caption,media_type,media_url,permalink,timestamp',
-                'access_token' => $this->getToken()->getValue(),
+                'access_token' => $this->getToken()->value,
                 'limit' => 25,
                 'after' => $next,
             ]);
@@ -79,11 +71,11 @@ class Client
         }
 
         try {
-            $response = $this->httpClient->get($media->getMediaUrl());
-            $body = $response->getBody();
+            $response = $this->httpClient->request('GET', $media->mediaUrl);
+            $body = $this->httpClient->stream($response);
 
-            while (!$body->eof()) {
-                fwrite($fp, $body->read(2048));
+            foreach ($body as $chunk) {
+                fwrite($fp, $chunk->getContent());
             }
         } finally {
             fclose($fp);
@@ -92,11 +84,12 @@ class Client
 
     public function getAuthorizationUrl(string $redirectUri) : string
     {
-        return sprintf('%s/oauth/authorize?%s', self::API_URL, http_build_query([
+        return sprintf('%s?%s', self::OAUTH_AUTHORIZATION_URL, http_build_query([
+            'enable_fb_login' => '0',
             'client_id' => $this->clientId,
             'redirect_uri' => $redirectUri,
-            'scope' => 'user_profile,user_media',
             'response_type' => 'code',
+            'scope' => 'instagram_business_basic',
         ]));
     }
 
@@ -114,7 +107,7 @@ class Client
 
     private function exchangeCodeForShortLivedToken(string $redirectUri, string $code) : string
     {
-        $payload = $this->sendApiRequest('/oauth/access_token', 'POST', [
+        $payload = $this->sendOAuthApiRequest('POST', [
             'client_id' => $this->clientId,
             'client_secret' => $this->clientSecret,
             'grant_type' => 'authorization_code',
@@ -131,6 +124,7 @@ class Client
 
     private function exchangeShortLivedTokenForLongLived(string $token) : AccessToken
     {
+        $time = time();
         $payload = $this->sendGraphRequest('/access_token', 'GET', [
             'grant_type' => 'ig_exchange_token',
             'client_secret' => $this->clientSecret,
@@ -138,8 +132,9 @@ class Client
         ]);
 
         if (isset($payload['access_token']) && isset($payload['expires_in'])) {
-            return new AccessToken($payload['access_token'], time() + $payload['expires_in']);
+            return new AccessToken($payload['access_token'], $time + $payload['expires_in']);
         } else {
+            var_dump($payload);
             throw new AccessTokenException('Failed exchanging short-lived token for long-lived');
         }
     }
@@ -148,7 +143,7 @@ class Client
     {
         return new Media(
             $data['id'],
-            $data['media_type'],
+            MediaType::from($data['media_type']),
             $data['media_url'],
             $data['permalink'],
             new DateTimeImmutable($data['timestamp']),
@@ -156,45 +151,42 @@ class Client
         );
     }
 
-    private function sendApiRequest(string $endpoint, string $method = 'GET', array $params = []) : array
+    private function sendOAuthApiRequest(string $method = 'GET', array $params = []) : array
     {
-        return $this->sendRequest(self::API_URL . $endpoint, $method, $params);
+        return $this->sendRequest(self::OAUTH_API_URL, $method, $params);
     }
 
     private function sendGraphRequest(string $endpoint, string $method = 'GET', array $params = []) : array
     {
-        return $this->sendRequest(self::GRAPH_URL . $endpoint, $method, $params);
+        return $this->sendRequest(self::GRAPH_API_URL . $endpoint, $method, $params);
     }
 
     private function sendRequest(string $url, string $method = 'GET', array $params = []) : array
     {
         try {
             $options = array_filter([
-                'http_errors' => true,
-                $method === 'GET' ? 'query' : 'form_params' => array_filter($params),
+                $method === 'GET' ? 'query' : 'body' => array_filter($params),
             ]);
 
             $response = $this->httpClient->request($method, $url, $options);
-            return json_decode($response->getBody()->getContents(), true);
-        } catch (ClientException $e) {
-            if ($e->hasResponse()) {
-                $payload = json_decode($e->getResponse()->getBody()->getContents(), true);
+            return $response->toArray();
+        } catch (ClientExceptionInterface $e) {
+            $payload = $e->getResponse()->toArray(false);
 
-                if (isset($payload['error'])) {
-                    switch ($payload['error']['code'] ?? -1) {
-                        case 190:
-                            $this->clearToken();
-                            throw new AccessTokenException($payload['error']['message'] ?? 'OAuth Token expired');
+            if (isset($payload['error'])) {
+                switch ($payload['error']['code'] ?? -1) {
+                    case 190:
+                        $this->clearToken();
+                        throw new AccessTokenException($payload['error']['message'] ?? 'OAuth Token expired');
 
-                        case 4:
-                        case 17:
-                        case 32:
-                        case 613:
-                            throw new RateLimitException($payload['error']['message'] ?? 'Rate limit reached');
+                    case 4:
+                    case 17:
+                    case 32:
+                    case 613:
+                        throw new RateLimitException($payload['error']['message'] ?? 'Rate limit reached');
 
-                        default:
-                            throw new InstagramException($payload['error']['message'] ?? 'Unknown error when communicating with Instagram API');
-                    }
+                    default:
+                        throw new InstagramException($payload['error']['message'] ?? 'Unknown error when communicating with Instagram API');
                 }
             }
 
